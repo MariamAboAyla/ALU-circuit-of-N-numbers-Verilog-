@@ -1,0 +1,173 @@
+`define NUM_BITS 6
+module full_adder(sum,carry,x,y,z);
+input x,y,z;
+output sum,carry;
+wire s1,c1,c2;
+xor(s1,x,y);
+and(c1,x,y);
+xor(sum,s1,z);
+and(c2,s1,z);
+or(carry,c1,c2);
+
+    
+endmodule
+
+module MUX4x1(res , s1,s0, a,b,c,d);
+	input a,b,c,d,s0,s1;// 2 selection lines
+	output res;
+	
+	wire [3:0] ans;
+    wire s0bar,s1bar;
+	not(s0bar,s0);
+    not(s1bar,s1);
+    and(ans[0],s1bar,s0bar,a);
+    and(ans[1],s1bar,s0,b);
+    and(ans[2],s1,s0bar,c);
+    and(ans[3],s1,s0,d);
+	or(res,ans[0],ans[1],ans[2],ans[3]);
+	
+endmodule
+
+module MUX2x1(res,s2,a,b);
+	input a,b,s2;// 1 selection lines
+	output res;
+	
+	wire ans0,ans1,s2bar;
+	not(s2bar,s2);
+    and(ans0,s2bar,a);
+    and(ans1,s2,b);
+	or(res,ans0,ans1);
+	
+endmodule
+
+module MUX3x1(res , s1,s0, a,b,c);
+input a,b,c,s0,s1;// 2 selection lines
+	output res;
+	
+	wire [3:0] ans;
+    wire s0bar,s1bar;
+	not(s0bar,s0);
+    not(s1bar,s1);
+    and(ans[0],s1bar,s0bar,a);
+    and(ans[1],s1bar,s0,b);
+    and(ans[2],s1,s0bar,c);
+    and(ans[3],s1,s0,c);
+	or(res,ans[0],ans[1],ans[2],ans[3]);
+   
+endmodule
+
+module Arithmetic(output [N-1:0] d,output carry,input [N-1:0] a,input [N-1:0] b,input s1,input s0);
+parameter N = `NUM_BITS;
+wire [N:0]c;
+wire [N-1:0]muxO;
+wire [N-1:0]notB;
+
+MUX4x1 m(c[0],s1,s0,1'b0,1'b1,1'b1,1'b0);//explicitly assign c[0] which is like cin but from inside to control its needed value based on selected operation
+   
+   generate
+   genvar i;
+   for(i=0;i<=N-1;i=i+1)
+   begin
+      not(notB[i],b[i]);
+      MUX4x1 m(muxO[i],s1,s0,b[i],notB[i],1'b0,1'b1);
+      full_adder f(d[i],c[i+1],a[i],muxO[i],c[i]);
+   end
+   endgenerate
+
+buf(carry,c[N]);
+  
+endmodule
+
+module Logical(output [N-1:0] e,input [N-1:0] a,input [N-1:0] b,input s1,input s0);
+parameter N = `NUM_BITS;
+wire Anding[N-1:0];
+wire Oring[N-1:0];
+wire Xoring[N-1:0];
+wire Shifting[N-1:0];
+generate
+   genvar j;
+   for(j=0;j<=N-2;j=j+1)
+   begin
+      buf(Shifting[j],a[j+1]);
+     
+   end
+   endgenerate
+
+   buf(Shifting[N-1],a[N-1]);
+
+   generate
+   genvar i;
+   for(i=0;i<=N-1;i=i+1)
+   begin
+      and(Anding[i],a[i],b[i]);
+      or(Oring[i],a[i],b[i]);
+      xor(Xoring[i],a[i],b[i]);
+      MUX4x1 mm(e[i],s1,s0,Anding[i],Oring[i],Xoring[i],Shifting[i]);
+     
+   end
+   endgenerate
+endmodule
+
+module ALU(output [N:0] f,input [N-1:0] a,input [N-1:0] b,input s2,input s1,input s0);
+parameter N = `NUM_BITS;
+wire [N-1:0]d;
+wire [N-1:0]e;
+wire carry,state;
+Arithmetic ar(d,carry,a,b,s1,s0);
+Logical lo(e,a, b,s1,s0);
+
+   generate
+   genvar i;
+   for(i=0;i<=N-1;i=i+1)
+   begin
+      MUX2x1 mm(f[i],s2,d[i],e[i]);
+   end
+   endgenerate
+
+   and(state,s2,s1,s0);// to detect in which case to determine the N+1th bit it
+   MUX3x1 mmm(f[N],state,s2,carry,1'b0,a[N-1]);//asigning N+1th bit according to each case of 3 cases
+   
+
+
+endmodule
+
+module ALU_test(input [N-1:0] a,input [N-1:0] b,input s2,input s1,input s0);
+parameter N = `NUM_BITS;
+wire [N:0] f;
+ALU alu(f,a,b,s2,s1,s0);
+
+   generate
+   genvar i;
+   for(i=N; i>=0; i=i-1)
+   begin
+      initial begin
+      
+          #5 $write("%b",f[i]);
+      end
+   end
+   initial begin
+      #5 $write("\n"); 
+   end
+   endgenerate
+endmodule
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+module main();
+// A+B  ,000
+//A-B ,001
+//A+1 ,010
+//A-1 ,011
+//A and b 100
+//a or b 101
+//a xor b 110
+//arithmetic shift right for input A 111
+// order is s2 s1 s0
+parameter N = `NUM_BITS;
+   wire [N-1:0]a=6'b011111;
+   wire [N-1:0]b=6'b001010;
+   wire s2=1,s1=1,s0=0;
+   ALU_test ft(a, b,s2,s1,s0);
+endmodule
